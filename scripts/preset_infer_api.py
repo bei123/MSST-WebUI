@@ -26,17 +26,26 @@ class InferenceResponse(BaseModel):
     output_path: Optional[str] = None
     time_cost: Optional[float] = None
 
+class AudioParams(BaseModel):
+    wav_bit_depth: str = "PCM_16"
+    flac_bit_depth: str = "PCM_16"
+    mp3_bit_rate: str = "192k"
+
 class LocalPresetRequest(BaseModel):
     preset_path: str
     output_format: str = "wav"
     extra_output_dir: bool = False
+    audio_params: Optional[AudioParams] = None
 
 @app.post("/infer", response_model=InferenceResponse)
 async def infer_preset(
     preset_file: UploadFile = File(...),
     input_file: UploadFile = File(...),
     output_format: str = Form("wav"),
-    extra_output_dir: bool = Form(False)
+    extra_output_dir: bool = Form(False),
+    wav_bit_depth: str = Form("PCM_16"),
+    flac_bit_depth: str = Form("PCM_16"),
+    mp3_bit_rate: str = Form("192k")
 ):
     try:
         # 创建临时目录存储上传的文件
@@ -77,6 +86,11 @@ async def infer_preset(
 
         # 初始化预设
         preset = Presets(preset_data, force_cpu=False, use_tta=False, logger=logger)
+        
+        # 设置音频参数
+        preset.wav_bit_depth = wav_bit_depth
+        preset.flac_bit_depth = flac_bit_depth
+        preset.mp3_bit_rate = mp3_bit_rate
         
         if not preset.is_exist_models()[0]:
             return JSONResponse(
@@ -165,6 +179,9 @@ async def infer_preset_local(
     preset_path: str = Form(...),
     output_format: str = Form("wav"),
     extra_output_dir: bool = Form(False),
+    wav_bit_depth: str = Form("PCM_16"),
+    flac_bit_depth: str = Form("PCM_16"),
+    mp3_bit_rate: str = Form("192k"),
     input_file: UploadFile = File(...)
 ):
     try:
@@ -204,6 +221,11 @@ async def infer_preset_local(
 
         # 初始化预设
         preset = Presets(preset_data, force_cpu=False, use_tta=False, logger=logger)
+        
+        # 设置音频参数
+        preset.wav_bit_depth = wav_bit_depth
+        preset.flac_bit_depth = flac_bit_depth
+        preset.mp3_bit_rate = mp3_bit_rate
         
         if not preset.is_exist_models()[0]:
             return JSONResponse(
@@ -292,7 +314,10 @@ async def infer_preset_upload(
     preset_file: UploadFile = File(...),
     input_file: UploadFile = File(...),
     output_format: str = Form("wav"),
-    extra_output_dir: bool = Form(False)
+    extra_output_dir: bool = Form(False),
+    wav_bit_depth: str = Form("PCM_16"),
+    flac_bit_depth: str = Form("PCM_16"),
+    mp3_bit_rate: str = Form("192k")
 ):
     try:
         # 创建临时目录存储上传的文件
@@ -333,6 +358,11 @@ async def infer_preset_upload(
 
         # 初始化预设
         preset = Presets(preset_data, force_cpu=False, use_tta=False, logger=logger)
+        
+        # 设置音频参数
+        preset.wav_bit_depth = wav_bit_depth
+        preset.flac_bit_depth = flac_bit_depth
+        preset.mp3_bit_rate = mp3_bit_rate
         
         if not preset.is_exist_models()[0]:
             return JSONResponse(
