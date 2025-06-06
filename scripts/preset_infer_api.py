@@ -10,15 +10,29 @@ from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from fastapi.responses import JSONResponse, FileResponse
 import uvicorn
 from pydantic import BaseModel
+from contextlib import asynccontextmanager
 
-from webui.preset import Presets
+from inference.preset_infer import Presets
 from webui.utils import load_configs, get_vr_model, get_msst_model
 from webui.setup import setup_webui, set_debug
 from utils.constant import *
 from utils.logger import get_logger
 
 logger = get_logger()
-app = FastAPI(title="MSST Preset Inference API", version="1.0.0")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # 启动时执行
+    if not os.path.exists("configs"):
+        shutil.copytree("configs_backup", "configs")
+    if not os.path.exists("data"):
+        shutil.copytree("data_backup", "data")
+    setup_webui()
+    yield
+    # 关闭时执行
+    pass
+
+app = FastAPI(title="MSST Preset Inference API", version="1.0.0", lifespan=lifespan)
 
 class InferenceResponse(BaseModel):
     status: str
@@ -518,15 +532,6 @@ async def list_presets():
             status_code=500,
             content={"status": "error", "message": str(e)}
         )
-
-@app.on_event("startup")
-async def startup_event():
-    # 初始化必要的配置
-    if not os.path.exists("configs"):
-        shutil.copytree("configs_backup", "configs")
-    if not os.path.exists("data"):
-        shutil.copytree("data_backup", "data")
-    setup_webui()
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=9000) 
