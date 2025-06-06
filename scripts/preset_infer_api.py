@@ -12,7 +12,7 @@ import uvicorn
 from pydantic import BaseModel
 from contextlib import asynccontextmanager
 
-from inference.preset_infer import Presets
+from inference.preset_infer import PresetInfer
 from webui.utils import load_configs, get_vr_model, get_msst_model
 from webui.setup import setup_webui, set_debug
 from utils.constant import *
@@ -30,7 +30,8 @@ async def lifespan(app: FastAPI):
     setup_webui()
     yield
     # 关闭时执行
-    pass
+    if os.path.exists(TEMP_PATH):
+        shutil.rmtree(TEMP_PATH)
 
 app = FastAPI(title="MSST Preset Inference API", version="1.0.0", lifespan=lifespan)
 
@@ -50,6 +51,31 @@ class LocalPresetRequest(BaseModel):
     output_format: str = "wav"
     extra_output_dir: bool = False
     audio_params: Optional[AudioParams] = None
+
+def process_preset_inference(preset_data, input_folder, store_dir, output_format, extra_output_dir, force_cpu=False, use_tta=False, callback=None):
+    """核心推理逻辑"""
+    if not os.path.exists(store_dir):
+        os.makedirs(store_dir)
+    
+    if os.path.exists(TEMP_PATH):
+        shutil.rmtree(TEMP_PATH)
+        
+    start_time = time.time()
+    logger.info(f"开始处理 - 输入: {input_folder}, 输出: {store_dir}")
+    logger.debug(f"预设配置: {preset_data}")
+    
+    try:
+        preset = PresetInfer(preset_data, force_cpu=force_cpu, use_tta=use_tta, logger=logger, callback=callback)
+        preset.process_folder(input_folder, store_dir, output_format, extra_output_dir)
+        time_cost = round(time.time() - start_time, 2)
+        logger.info(f"处理完成 - 耗时: {time_cost}秒")
+        return time_cost
+    except Exception as e:
+        logger.error(f"处理失败: {str(e)}")
+        raise
+    finally:
+        if os.path.exists(TEMP_PATH):
+            shutil.rmtree(TEMP_PATH)
 
 @app.post("/infer", response_model=InferenceResponse)
 async def infer_preset(
@@ -89,7 +115,7 @@ async def infer_preset(
         if preset_version not in SUPPORTED_PRESET_VERSION:
             return JSONResponse(
                 status_code=400,
-                content={"status": "error", "message": f"Unsupported preset version: {preset_version}"}
+                content={"status": "error", "message": f"不支持的预设版本: {preset_version}"}
             )
 
         # 设置输出目录
@@ -99,7 +125,7 @@ async def infer_preset(
             direct_output = os.path.join(store_dir, "extra_output")
 
         # 初始化预设
-        preset = Presets(preset_data, force_cpu=False, use_tta=False, logger=logger)
+        preset = PresetInfer(preset_data, force_cpu=False, use_tta=False, logger=logger)
         
         # 设置音频参数
         preset.wav_bit_depth = wav_bit_depth
@@ -109,76 +135,29 @@ async def infer_preset(
         if not preset.is_exist_models()[0]:
             return JSONResponse(
                 status_code=400,
-                content={"status": "error", "message": f"Model {preset.is_exist_models()[1]} not found"}
+                content={"status": "error", "message": f"模型 {preset.is_exist_models()[1]} 不存在"}
             )
 
         # 开始处理
-        start_time = time.time()
-        current_step = 0
-        input_to_use = input_folder
-        tmp_store_dir = None
-        
-        for step in range(preset.total_steps):
-            if current_step == 0:
-                input_to_use = input_folder
-                tmp_store_dir = os.path.join(TEMP_PATH, "step_1_output")
-            elif preset.total_steps - 1 > current_step > 0:
-                if input_to_use != input_folder:
-                    shutil.rmtree(input_to_use)
-                input_to_use = os.path.join(TEMP_PATH, f"step_{current_step}_output")
-                tmp_store_dir = os.path.join(TEMP_PATH, f"step_{current_step + 1}_output")
-            elif current_step == preset.total_steps - 1:
-                input_to_use = os.path.join(TEMP_PATH, f"step_{current_step}_output")
-                tmp_store_dir = store_dir
-            elif preset.total_steps == 1:
-                input_to_use = input_folder
-                tmp_store_dir = store_dir
-
-            data = preset.get_step(step)
-            model_type = data["model_type"]
-            model_name = data["model_name"]
-            input_to_next = data["input_to_next"]
-            output_to_storage = data["output_to_storage"]
-
-            if model_type == "UVR_VR_Models":
-                primary_stem, secondary_stem, _, _ = get_vr_model(model_name)
-                storage = {primary_stem: [], secondary_stem: []}
-                storage[input_to_next].append(tmp_store_dir)
-                for stem in output_to_storage:
-                    storage[stem].append(direct_output)
-
-                result = preset.vr_infer(model_name, input_to_use, storage, output_format)
-                if result[0] == 0:
-                    return JSONResponse(
-                        status_code=500,
-                        content={"status": "error", "message": f"Failed to run VR model {model_name}: {result[1]}"}
-                    )
-            else:
-                model_path, config_path, msst_model_type, _ = get_msst_model(model_name)
-                stems = load_configs(config_path).training.get("instruments", [])
-                storage = {stem: [] for stem in stems}
-                storage[input_to_next].append(tmp_store_dir)
-                for stem in output_to_storage:
-                    storage[stem].append(direct_output)
-
-                result = preset.msst_infer(msst_model_type, config_path, model_path, input_to_use, storage, output_format)
-                if result[0] == 0:
-                    return JSONResponse(
-                        status_code=500,
-                        content={"status": "error", "message": f"Failed to run MSST model {model_name}: {result[1]}"}
-                    )
-            current_step += 1
-
-        time_cost = round(time.time() - start_time, 2)
+        time_cost = process_preset_inference(
+            preset_data=preset_data,
+            input_folder=input_folder,
+            store_dir=store_dir,
+            output_format=output_format,
+            extra_output_dir=extra_output_dir,
+            force_cpu=False,
+            use_tta=False
+        )
         
         return InferenceResponse(
             status="success",
-            message="Inference completed successfully",
+            message="处理完成",
             output_path=store_dir,
             time_cost=time_cost
         )
 
     except Exception as e:
+        logger.error(f"处理失败: {str(e)}")
         return JSONResponse(
             status_code=500,
             content={"status": "error", "message": str(e)}
@@ -187,6 +166,10 @@ async def infer_preset(
         # 清理临时文件
         if os.path.exists(TEMP_PATH):
             shutil.rmtree(TEMP_PATH)
+        if os.path.exists(preset_path):
+            os.remove(preset_path)
+        if os.path.exists(input_folder):
+            shutil.rmtree(input_folder)
 
 @app.post("/infer/local", response_model=InferenceResponse)
 async def infer_preset_local(
@@ -234,7 +217,7 @@ async def infer_preset_local(
             direct_output = os.path.join(store_dir, "extra_output")
 
         # 初始化预设
-        preset = Presets(preset_data, force_cpu=False, use_tta=False, logger=logger)
+        preset = PresetInfer(preset_data, force_cpu=False, use_tta=False, logger=logger)
         
         # 设置音频参数
         preset.wav_bit_depth = wav_bit_depth
@@ -248,63 +231,15 @@ async def infer_preset_local(
             )
 
         # 开始处理
-        start_time = time.time()
-        current_step = 0
-        input_to_use = input_folder
-        tmp_store_dir = None
-        
-        for step in range(preset.total_steps):
-            if current_step == 0:
-                input_to_use = input_folder
-                tmp_store_dir = os.path.join(TEMP_PATH, "step_1_output")
-            elif preset.total_steps - 1 > current_step > 0:
-                if input_to_use != input_folder:
-                    shutil.rmtree(input_to_use)
-                input_to_use = os.path.join(TEMP_PATH, f"step_{current_step}_output")
-                tmp_store_dir = os.path.join(TEMP_PATH, f"step_{current_step + 1}_output")
-            elif current_step == preset.total_steps - 1:
-                input_to_use = os.path.join(TEMP_PATH, f"step_{current_step}_output")
-                tmp_store_dir = store_dir
-            elif preset.total_steps == 1:
-                input_to_use = input_folder
-                tmp_store_dir = store_dir
-
-            data = preset.get_step(step)
-            model_type = data["model_type"]
-            model_name = data["model_name"]
-            input_to_next = data["input_to_next"]
-            output_to_storage = data["output_to_storage"]
-
-            if model_type == "UVR_VR_Models":
-                primary_stem, secondary_stem, _, _ = get_vr_model(model_name)
-                storage = {primary_stem: [], secondary_stem: []}
-                storage[input_to_next].append(tmp_store_dir)
-                for stem in output_to_storage:
-                    storage[stem].append(direct_output)
-
-                result = preset.vr_infer(model_name, input_to_use, storage, output_format)
-                if result[0] == 0:
-                    return JSONResponse(
-                        status_code=500,
-                        content={"status": "error", "message": f"Failed to run VR model {model_name}: {result[1]}"}
-                    )
-            else:
-                model_path, config_path, msst_model_type, _ = get_msst_model(model_name)
-                stems = load_configs(config_path).training.get("instruments", [])
-                storage = {stem: [] for stem in stems}
-                storage[input_to_next].append(tmp_store_dir)
-                for stem in output_to_storage:
-                    storage[stem].append(direct_output)
-
-                result = preset.msst_infer(msst_model_type, config_path, model_path, input_to_use, storage, output_format)
-                if result[0] == 0:
-                    return JSONResponse(
-                        status_code=500,
-                        content={"status": "error", "message": f"Failed to run MSST model {model_name}: {result[1]}"}
-                    )
-            current_step += 1
-
-        time_cost = round(time.time() - start_time, 2)
+        time_cost = process_preset_inference(
+            preset_data=preset_data,
+            input_folder=input_folder,
+            store_dir=store_dir,
+            output_format=output_format,
+            extra_output_dir=extra_output_dir,
+            force_cpu=False,
+            use_tta=False
+        )
         
         return InferenceResponse(
             status="success",
@@ -371,7 +306,7 @@ async def infer_preset_upload(
             direct_output = os.path.join(store_dir, "extra_output")
 
         # 初始化预设
-        preset = Presets(preset_data, force_cpu=False, use_tta=False, logger=logger)
+        preset = PresetInfer(preset_data, force_cpu=False, use_tta=False, logger=logger)
         
         # 设置音频参数
         preset.wav_bit_depth = wav_bit_depth
@@ -385,63 +320,15 @@ async def infer_preset_upload(
             )
 
         # 开始处理
-        start_time = time.time()
-        current_step = 0
-        input_to_use = input_folder
-        tmp_store_dir = None
-        
-        for step in range(preset.total_steps):
-            if current_step == 0:
-                input_to_use = input_folder
-                tmp_store_dir = os.path.join(TEMP_PATH, "step_1_output")
-            elif preset.total_steps - 1 > current_step > 0:
-                if input_to_use != input_folder:
-                    shutil.rmtree(input_to_use)
-                input_to_use = os.path.join(TEMP_PATH, f"step_{current_step}_output")
-                tmp_store_dir = os.path.join(TEMP_PATH, f"step_{current_step + 1}_output")
-            elif current_step == preset.total_steps - 1:
-                input_to_use = os.path.join(TEMP_PATH, f"step_{current_step}_output")
-                tmp_store_dir = store_dir
-            elif preset.total_steps == 1:
-                input_to_use = input_folder
-                tmp_store_dir = store_dir
-
-            data = preset.get_step(step)
-            model_type = data["model_type"]
-            model_name = data["model_name"]
-            input_to_next = data["input_to_next"]
-            output_to_storage = data["output_to_storage"]
-
-            if model_type == "UVR_VR_Models":
-                primary_stem, secondary_stem, _, _ = get_vr_model(model_name)
-                storage = {primary_stem: [], secondary_stem: []}
-                storage[input_to_next].append(tmp_store_dir)
-                for stem in output_to_storage:
-                    storage[stem].append(direct_output)
-
-                result = preset.vr_infer(model_name, input_to_use, storage, output_format)
-                if result[0] == 0:
-                    return JSONResponse(
-                        status_code=500,
-                        content={"status": "error", "message": f"Failed to run VR model {model_name}: {result[1]}"}
-                    )
-            else:
-                model_path, config_path, msst_model_type, _ = get_msst_model(model_name)
-                stems = load_configs(config_path).training.get("instruments", [])
-                storage = {stem: [] for stem in stems}
-                storage[input_to_next].append(tmp_store_dir)
-                for stem in output_to_storage:
-                    storage[stem].append(direct_output)
-
-                result = preset.msst_infer(msst_model_type, config_path, model_path, input_to_use, storage, output_format)
-                if result[0] == 0:
-                    return JSONResponse(
-                        status_code=500,
-                        content={"status": "error", "message": f"Failed to run MSST model {model_name}: {result[1]}"}
-                    )
-            current_step += 1
-
-        time_cost = round(time.time() - start_time, 2)
+        time_cost = process_preset_inference(
+            preset_data=preset_data,
+            input_folder=input_folder,
+            store_dir=store_dir,
+            output_format=output_format,
+            extra_output_dir=extra_output_dir,
+            force_cpu=False,
+            use_tta=False
+        )
         
         # 清理输入文件
         if os.path.exists(input_folder):
