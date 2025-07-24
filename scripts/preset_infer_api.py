@@ -6,7 +6,7 @@ sys.path.append(parent_dir)
 import shutil
 import time
 from typing import Optional
-from fastapi import FastAPI, UploadFile, File, Form, HTTPException
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException, BackgroundTasks
 from fastapi.responses import JSONResponse, FileResponse
 import uvicorn
 from pydantic import BaseModel
@@ -356,8 +356,8 @@ async def infer_preset_upload(
             shutil.rmtree(TEMP_PATH)
 
 @app.get("/download/{filename}")
-async def download_file(filename: str):
-    """下载推理结果文件"""
+async def download_file(filename: str, background_tasks: BackgroundTasks):
+    """下载推理结果文件并在下载后删除"""
     # 检查所有可能的输出目录
     possible_paths = [
         os.path.join("temp_uploads", "output", filename),
@@ -366,7 +366,9 @@ async def download_file(filename: str):
     
     for file_path in possible_paths:
         if os.path.exists(file_path):
-            return FileResponse(file_path, filename=filename)
+            # 下载后自动删除
+            background_tasks.add_task(os.remove, file_path)
+            return FileResponse(file_path, filename=filename, background=background_tasks)
     
     raise HTTPException(status_code=404, detail="File not found")
 
