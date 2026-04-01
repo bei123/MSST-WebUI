@@ -31,6 +31,9 @@ This is a webUI for [Music-Source-Separation-Training (MSST)](https://github.com
 
 We provided some detailed chinese documents for chinese users, click [here](https://r1kc63iz15l.feishu.cn/wiki/JSp3wk7zuinvIXkIqSUcCXY1nKc) to jump. For other users, go to `docs` folder to find some documents. You can also see [deton24](https://github.com/deton24)'s [Instrumental and vocal & stems separation & mastering guide](https://docs.google.com/document/d/17fjNvJzj8ZGSer7c7OFe_CNfUKbAxEh_OBv94ZdRG5c), which is a great guide too.
 
+> [!IMPORTANT]
+> [SOME](https://github.com/openvpi/SOME) has been deprecated, and the new audio to MIDI project [GAME: Generative Adaptive MIDI Extractor](https://github.com/openvpi/GAME) will be adapted shortly after stable testing.
+
 ## Run from source
 
 - Clone this repository.

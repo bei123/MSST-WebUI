@@ -19,7 +19,7 @@ from webui.utils import i18n, load_configs, save_configs, load_vr_model, get_vr_
 def open_model_folder(model_type):
 	if not model_type:
 		open_folder(MODEL_FOLDER)
-	if model_type == "UVR_VR_Models":
+	elif model_type == "UVR_VR_Models":
 		config = load_configs(WEBUI_CONFIG)
 		uvr_model_folder = config["settings"]["uvr_model_dir"]
 		open_folder(uvr_model_folder)
@@ -229,8 +229,8 @@ def install_unmsst_model(unmsst_model, unmsst_config, unmodel_class, unmodel_typ
 		model_name = os.path.basename(unmsst_model)
 		if not unmsst_config.endswith(".yaml"):
 			return i18n("请上传'.yaml'格式的配置文件")
-		if not unmsst_model.endswith((".ckpt", ".chpt", ".th")):
-			return i18n("请上传'ckpt', 'chpt', 'th'格式的模型文件")
+		if not unmsst_model.endswith((".ckpt", ".chpt", ".th", ".safetensors")):
+			return i18n("请上传'ckpt', 'chpt', 'th', 'safetensors'格式的模型文件")
 		if unmodel_class == "" or unmodel_type == "":
 			return i18n("请输入正确的模型类别和模型类型")
 

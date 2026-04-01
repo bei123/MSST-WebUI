@@ -110,7 +110,7 @@ def run_inference_single(selected_model, input_audio, store_dir, extract_instrum
 	input_path = TEMP_PATH
 
 	save_msst_inference_config(selected_model, input_folder, store_dir, extract_instrumental, gpu_id, output_format, force_cpu, use_tta)
-	message = start_inference(selected_model, input_path, store_dir, extract_instrumental, gpu_id, output_format, force_cpu, use_tta)
+	message = start_inference(selected_model, input_path, store_dir, extract_instrumental, gpu_id, output_format, force_cpu, use_tta, batch_mode="folder")
 	shutil.rmtree(TEMP_PATH)
 	return message
 
@@ -120,7 +120,15 @@ def run_multi_inference(selected_model, input_folder, store_dir, extract_instrum
 	return start_inference(selected_model, input_folder, store_dir, extract_instrumental, gpu_id, output_format, force_cpu, use_tta)
 
 
-def start_inference(selected_model, input_folder, store_dir, extract_instrumental, gpu_id, output_format, force_cpu, use_tta):
+def run_folder_batch_inference(selected_model, input_folder, store_dir, extract_instrumental, gpu_id, output_format, force_cpu, use_tta):
+	config = load_configs(WEBUI_CONFIG)
+	config["inference"]["batch_input_dir"] = input_folder
+	save_configs(config, WEBUI_CONFIG)
+	save_msst_inference_config(selected_model, input_folder, store_dir, extract_instrumental, gpu_id, output_format, force_cpu, use_tta)
+	return start_inference(selected_model, input_folder, store_dir, extract_instrumental, gpu_id, output_format, force_cpu, use_tta, batch_mode="recursive")
+
+
+def start_inference(selected_model, input_folder, store_dir, extract_instrumental, gpu_id, output_format, force_cpu, use_tta, batch_mode="folder"):
 	if selected_model == "":
 		return gr.Error(i18n("请选择模型"))
 	if input_folder == "":
@@ -176,7 +184,23 @@ def start_inference(selected_model, input_folder, store_dir, extract_instrumenta
 
 		msst_inference = multiprocessing.Process(
 			target=run_inference,
-			args=(model_type, config_path, model_path, device, gpu_ids, output_format, use_tta, store_dict, debug, wav_bit_depth, flac_bit_depth, mp3_bit_rate, input_folder, callback),
+			args=(
+				model_type,
+				config_path,
+				model_path,
+				device,
+				gpu_ids,
+				output_format,
+				use_tta,
+				store_dict,
+				debug,
+				wav_bit_depth,
+				flac_bit_depth,
+				mp3_bit_rate,
+				input_folder,
+				callback,
+				batch_mode,
+			),
 			name="msst_inference",
 		)
 
@@ -203,8 +227,23 @@ def start_inference(selected_model, input_folder, store_dir, extract_instrumenta
 	else:
 		return i18n("进程意外终止")
 
-
-def run_inference(model_type, config_path, model_path, device, gpu_ids, output_format, use_tta, store_dict, debug, wav_bit_depth, flac_bit_depth, mp3_bit_rate, input_folder, callback):
+def run_inference(
+	model_type,
+	config_path,
+	model_path,
+	device,
+	gpu_ids,
+	output_format,
+	use_tta,
+	store_dict,
+	debug,
+	wav_bit_depth,
+	flac_bit_depth,
+	mp3_bit_rate,
+	input_folder,
+	callback,
+	batch_mode="folder",
+):
 	logger.debug(
 		f"Start MSST inference process with parameters: model_type={model_type}, config_path={config_path}, model_path={model_path}, device={device}, gpu_ids={gpu_ids}, output_format={output_format}, use_tta={use_tta}, store_dict={store_dict}, debug={debug}, wav_bit_depth={wav_bit_depth}, flac_bit_depth={flac_bit_depth}, mp3_bit_rate={mp3_bit_rate}, input_folder={input_folder}"
 	)
@@ -224,7 +263,11 @@ def run_inference(model_type, config_path, model_path, device, gpu_ids, output_f
 			debug=debug,
 			callback=callback,
 		)
-		success_files = separator.process_folder(input_folder)
+		if batch_mode == "recursive":
+			base_store_dir = list(store_dict.values())[0]
+			success_files = separator.process_folder_recursive(input_folder, base_store_dir)
+		else:
+			success_files = separator.process_folder(input_folder)
 		separator.del_cache()
 
 		logger.info(f"Successfully separated files: {success_files}")
