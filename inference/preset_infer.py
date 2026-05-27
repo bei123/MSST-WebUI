@@ -268,6 +268,9 @@ def save_audio(audio, sr, output_format, file_name, store_dir):
 	elif output_format.lower() == "mp3":
 		file = os.path.join(store_dir, file_name + ".mp3")
 		if audio.dtype != np.int16:
+			peak = np.max(np.abs(audio))
+			if peak > 1.0:
+				audio = audio / peak
 			audio = (audio * 32767).astype(np.int16)
 		audio_segment = AudioSegment(audio.tobytes(), frame_rate=sr, sample_width=audio.dtype.itemsize, channels=2)
 		audio_segment.export(file, format="mp3", bitrate=mp3_bit_rate)
