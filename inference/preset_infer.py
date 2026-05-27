@@ -5,7 +5,7 @@ import soundfile as sf
 import librosa
 import glob
 import traceback
-from pydub import AudioSegment
+import subprocess
 
 from utils.logger import get_logger
 from utils.constant import *
@@ -267,13 +267,17 @@ def save_audio(audio, sr, output_format, file_name, store_dir):
 		sf.write(file, audio, sr, subtype=flac_bit_depth)
 	elif output_format.lower() == "mp3":
 		file = os.path.join(store_dir, file_name + ".mp3")
-		if audio.dtype != np.int16:
-			peak = np.max(np.abs(audio))
-			if peak > 1.0:
-				audio = audio / peak
-			audio = (audio * 32767).astype(np.int16)
-		audio_segment = AudioSegment(audio.tobytes(), frame_rate=sr, sample_width=audio.dtype.itemsize, channels=2)
-		audio_segment.export(file, format="mp3", bitrate=mp3_bit_rate)
+		channels = audio.shape[1] if audio.ndim > 1 else 1
+		subprocess.run(
+			[FFMPEG, "-y", "-f", "f32le",
+			 "-ar", str(sr),
+			 "-ac", str(channels),
+			 "-i", "pipe:0",
+			 "-codec:a", "libmp3lame",
+			 "-b:a", mp3_bit_rate,
+			 file],
+			input=audio.astype(np.float32).tobytes(), check=True, capture_output=True
+		)
 	else:
 		file = os.path.join(store_dir, file_name + ".wav")
 		sf.write(file, audio, sr, subtype=wav_bit_depth)

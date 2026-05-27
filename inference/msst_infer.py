@@ -9,7 +9,7 @@ import platform
 import subprocess
 from time import time
 from tqdm import tqdm
-from pydub import AudioSegment
+from utils.constant import FFMPEG
 
 from safetensors.torch import load_file
 
@@ -337,20 +337,19 @@ class MSSeparator:
 		if self.output_format.lower() == "flac":
 			file = os.path.join(store_dir, file_name + ".flac")
 			sf.write(file, audio, sr, subtype=self.audio_params["flac_bit_depth"])
-
 		elif self.output_format.lower() == "mp3":
 			file = os.path.join(store_dir, file_name + ".mp3")
-
-			if audio.dtype != np.int16:
-				peak = np.max(np.abs(audio))
-				if peak > 1.0:
-					audio = audio / peak
-				audio = (audio * 32767).astype(np.int16)
-
-			audio_segment = AudioSegment(audio.tobytes(), frame_rate=sr, sample_width=audio.dtype.itemsize, channels=2)
-
-			audio_segment.export(file, format="mp3", bitrate=self.audio_params["mp3_bit_rate"])
-
+			channels = audio.shape[1] if audio.ndim > 1 else 1
+			subprocess.run(
+				[FFMPEG, "-y", "-f", "f32le",
+				 "-ar", str(sr),
+				 "-ac", str(channels),
+				 "-i", "pipe:0",
+				 "-codec:a", "libmp3lame",
+				 "-b:a", self.audio_params["mp3_bit_rate"],
+				 file],
+				input=audio.astype(np.float32).tobytes(), check=True, capture_output=True
+			)
 		else:
 			file = os.path.join(store_dir, file_name + ".wav")
 			sf.write(file, audio, sr, subtype=self.audio_params["wav_bit_depth"])
