@@ -9,6 +9,13 @@
 
 </div>
 
+> [!IMPORTANT]
+> 此项目即将停止维护。建议使用 **pymss-desktop**，它支持更全面的模型，推理速度比 MSST-WebUI 快 50-100 倍，并且提供更美观的 GUI 界面。
+>
+> - Cross-platform desktop GUI for pymss music source separation：[pymss-project/pymss-desktop](https://github.com/pymss-project/pymss-desktop)
+> - Python package for music source separation.：[pymss-project/pymss](https://github.com/pymss-project/pymss)
+> - ComfyUI custom nodes for pymss music source separation.：[pymss-project/comfy-mss](https://github.com/pymss-project/comfy-mss)
+
 ## 介绍
 
 这是一个用于 [Music-Source-Separation-Training (MSST)](https://github.com/ZFTurbo/Music-Source-Separation-Training) 的WebUI，MSST是一个用于训练音乐源分离模型的仓库。您可以使用这个WebUI推断MSST模型和VR模型，预设流程页面允许您自定义处理流程。您可以在“安装模型”界面安装模型。如果您之前已经下载了 [Ultimate Vocal Remover (UVR)](https://github.com/Anjok07/ultimatevocalremovergui)，则无需重新下载VR模型。您可以直接进入“设置”页面，选择您的UVR5模型文件夹。我们还在WebUI中提供了一些便捷的工具，例如 [Singing-Oriented MIDI Extractor (SOME)](https://github.com/openvpi/SOME/)、更高级的合奏模式等。

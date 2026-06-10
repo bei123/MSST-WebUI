@@ -9,6 +9,13 @@ A WebUI app for Music-Source-Separation-Training and we packed UVR together!<br>
 
 </div>
 
+> [!IMPORTANT]
+> This project will soon stop being maintained. We recommend using **pymss-desktop**, which supports more comprehensive models, provides 50-100x faster inference than MSST-WebUI, and has a better-looking GUI.
+>
+> - Cross-platform desktop GUI for pymss music source separation: [pymss-project/pymss-desktop](https://github.com/pymss-project/pymss-desktop)
+> - Python package for music source separation: [pymss-project/pymss](https://github.com/pymss-project/pymss)
+> - ComfyUI custom nodes for pymss music source separation: [pymss-project/comfy-mss](https://github.com/pymss-project/comfy-mss)
+
 ## Introduction
 
 This is a webUI for [Music-Source-Separation-Training (MSST)](https://github.com/ZFTurbo/Music-Source-Separation-Training), which is a repository for training models for music source separation. You can use this webUI to infer the MSST model and VR Models, and the preset process page allows you to customize the processing flow yourself. You can install models in the "Install Models" interface. If you have downloaded [Ultimate Vocal Remover (UVR)](https://github.com/Anjok07/ultimatevocalremovergui) before, you do not need to download VR Models again. You can go to the "Settings" page and directly select your UVR5 model folder. We also provide some convenient tools in the WebUI such as [Singing-Oriented MIDI Extractor (SOME)](https://github.com/openvpi/SOME/), advanced ensemble mode, and more.
